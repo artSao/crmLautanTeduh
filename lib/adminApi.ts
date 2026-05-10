@@ -1,0 +1,206 @@
+import type {
+  AdminLoginResponse,
+  AntrianDetail,
+  Broadcast,
+  BroadcastPayload,
+  CrmContact,
+  CrmContactPayload,
+  CrmReminderPayload,
+  CrmSendPayload,
+} from "@/lib/types";
+import { getAuthHeaders } from "@/lib/auth";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/proxy";
+
+async function fetchJson<T>(
+  url: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const res = await fetch(url, {
+    cache: "no-store",
+    ...options,
+  });
+
+  const text = await res.text();
+
+  if (!res.ok) {
+    let payload: any;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = { message: text };
+    }
+    throw new Error(payload.message ?? `Fetch error ${res.status}`);
+  }
+
+  return text ? (JSON.parse(text) as T) : ({} as T);
+}
+
+export async function adminLogin(
+  username: string,
+  password: string,
+): Promise<AdminLoginResponse> {
+  return fetchJson<{ success: boolean; data: AdminLoginResponse }>(
+    `${API_BASE_URL}/auth/admin/login`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ username, password }),
+    },
+  ).then((payload) => payload.data);
+}
+
+export async function getAdminCabangQueue(
+  cabangId: number,
+  status?: string,
+): Promise<AntrianDetail[]> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return fetchJson<{ success: boolean; data: AntrianDetail[] }>(
+    `${API_BASE_URL}/cabang/${cabangId}/antrian/detail${query}`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+    },
+  ).then((payload) => payload.data);
+}
+
+export async function callNext(): Promise<AntrianDetail> {
+  return fetchJson<{ success: boolean; data: AntrianDetail }>(
+    `${API_BASE_URL}/antrian/call-next`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+    },
+  ).then((payload) => payload.data);
+}
+
+export async function completeQueue(antrianId: number): Promise<void> {
+  await fetchJson<{ success: boolean; message: string }>(
+    `${API_BASE_URL}/antrian/${antrianId}/selesai`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+    },
+  );
+}
+
+export async function deleteQueue(antrianId: number): Promise<void> {
+  await fetchJson<{ success: boolean; message: string }>(
+    `${API_BASE_URL}/antrian/${antrianId}`,
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+    },
+  );
+}
+
+export async function sendCrmMessage(payload: CrmSendPayload): Promise<string> {
+  return fetchJson<{ success: boolean; message: string }>(
+    `${API_BASE_URL}/crm/send`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(payload),
+    },
+  ).then((data) => data.message);
+}
+
+export async function sendCrmReminder(
+  payload: CrmReminderPayload,
+): Promise<string> {
+  return fetchJson<{ success: boolean; message: string }>(
+    `${API_BASE_URL}/crm/reminders`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(payload),
+    },
+  ).then((data) => data.message);
+}
+
+export async function createBroadcast(
+  payload: BroadcastPayload,
+): Promise<Broadcast> {
+  return fetchJson<{ success: boolean; data: Broadcast }>(
+    `${API_BASE_URL}/broadcast`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(payload),
+    },
+  ).then((payload) => payload.data);
+}
+
+const LOCAL_CRM_CONTACTS_API = "/api/crm/contacts";
+
+export async function getCrmContacts(): Promise<CrmContact[]> {
+  return fetchJson<{ success: boolean; data: CrmContact[] }>(
+    LOCAL_CRM_CONTACTS_API,
+    {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    },
+  ).then((payload) => payload.data);
+}
+
+export async function createCrmContact(
+  payload: CrmContactPayload,
+): Promise<CrmContact> {
+  return fetchJson<{ success: boolean; data: CrmContact }>(
+    LOCAL_CRM_CONTACTS_API,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+  ).then((payload) => payload.data);
+}
+
+export async function deleteCrmContact(id: number): Promise<void> {
+  await fetchJson<{ success: boolean; message: string }>(
+    `${LOCAL_CRM_CONTACTS_API}/${id}`,
+    {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    },
+  );
+}
+
+export async function getBroadcastList(): Promise<Broadcast[]> {
+  return fetchJson<{ success: boolean; data: Broadcast[] }>(
+    `${API_BASE_URL}/broadcast/all`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+    },
+  ).then((payload) => payload.data);
+}
