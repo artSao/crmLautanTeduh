@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getAdminUser } from "@/lib/auth";
 import { getAdminCabangQueue } from "@/lib/adminApi";
-import type { AntrianDetail } from "@/lib/types";
 
 export default function AdminPage() {
   const [adminName, setAdminName] = useState("");
@@ -20,6 +19,7 @@ export default function AdminPage() {
   useEffect(() => {
     const user = getAdminUser();
     if (user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAdminName(user.name);
       setCabangId(user.cabang_id);
     }

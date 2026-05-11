@@ -21,7 +21,7 @@ async function readContacts(): Promise<CrmContact[]> {
     await ensureDataDir();
     const data = await fs.readFile(CONTACTS_FILE, "utf-8");
     return JSON.parse(data) as CrmContact[];
-  } catch (error) {
+  } catch {
     return [];
   }
 }
@@ -33,7 +33,7 @@ async function writeContacts(contacts: CrmContact[]): Promise<void> {
 }
 
 // Simple auth check (skip for demo)
-function checkAuth(request: NextRequest): boolean {
+function checkAuth(): boolean {
   // For demo purposes, skip auth
   return true;
   // In production, verify Bearer token
@@ -43,8 +43,8 @@ function checkAuth(request: NextRequest): boolean {
   // return verifyToken(token); // Implement token verification
 }
 
-export async function GET(request: NextRequest) {
-  if (!checkAuth(request)) {
+export async function GET() {
+  if (!checkAuth()) {
     return NextResponse.json(
       { success: false, message: "Unauthorized" },
       { status: 401 },
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!checkAuth(request)) {
+  if (!checkAuth()) {
     return NextResponse.json(
       { success: false, message: "Unauthorized" },
       { status: 401 },

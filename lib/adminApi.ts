@@ -24,13 +24,15 @@ async function fetchJson<T>(
   const text = await res.text();
 
   if (!res.ok) {
-    let payload: any;
+    let payload: unknown;
     try {
       payload = JSON.parse(text);
     } catch {
       payload = { message: text };
     }
-    throw new Error(payload.message ?? `Fetch error ${res.status}`);
+    const errorMessage =
+      (payload as { message?: string })?.message ?? `Fetch error ${res.status}`;
+    throw new Error(errorMessage);
   }
 
   return text ? (JSON.parse(text) as T) : ({} as T);

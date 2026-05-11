@@ -32,7 +32,10 @@ export default function AdminLayout({
     }
 
     const user = getAdminUser();
-    setAdmin(user);
+    if (user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAdmin(user);
+    }
     setReady(true);
   }, [router]);
 

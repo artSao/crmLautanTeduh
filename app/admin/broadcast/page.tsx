@@ -16,10 +16,6 @@ export default function AdminBroadcastPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    fetchBroadcasts();
-  }, []);
-
   const fetchBroadcasts = async () => {
     setError(null);
     try {
@@ -29,6 +25,11 @@ export default function AdminBroadcastPage() {
       setError(err instanceof Error ? err.message : "Gagal memuat broadcast.");
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchBroadcasts();
+  }, []);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

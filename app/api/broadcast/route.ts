@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Broadcast, BroadcastPayload } from "@/lib/types";
 import { readBroadcasts, writeBroadcasts } from "./data";
 
-function checkAuth(request: NextRequest): boolean {
+function checkAuth(): boolean {
   // For demo purpose, auth is skipped here.
   return true;
 }
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!checkAuth(request)) {
+  if (!checkAuth()) {
     return NextResponse.json(
       { success: false, message: "Unauthorized" },
       { status: 401 },

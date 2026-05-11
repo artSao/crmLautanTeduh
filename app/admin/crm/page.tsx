@@ -23,17 +23,16 @@ export default function AdminCrmPage() {
   const [bulkMessage, setBulkMessage] = useState("");
   const [bulkLoading, setBulkLoading] = useState(false);
 
-  const loadContacts = async () => {
-    try {
-      const data = await getCrmContacts();
-      setContacts(data);
-    } catch (err) {
-      console.error("Gagal memuat kontak:", err);
-      setError("Gagal memuat kontak dari database.");
-    }
-  };
-
   useEffect(() => {
+    const loadContacts = async () => {
+      try {
+        const data = await getCrmContacts();
+        setContacts(data);
+      } catch (err) {
+        console.error("Gagal memuat kontak:", err);
+        setError("Gagal memuat kontak dari database.");
+      }
+    };
     loadContacts();
   }, []);
 
