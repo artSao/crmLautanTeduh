@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 
 const REMOTE_API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://rakaascode.site/api";
+  process.env.API_BASE_URL ?? "https://rakaascode.site/api";
 
 function getTargetUrl(pathSegments: string[] | undefined, search: string) {
   const baseUrl = new URL(REMOTE_API_BASE_URL);
