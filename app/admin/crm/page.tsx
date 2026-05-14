@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import {
   sendCrmMessage,
   sendCrmReminder,
-  getCrmContacts,
-  getAntrianContacts,
+  getCustomerContacts,
+  getLocalContacts,
 } from "@/lib/adminApi";
 import { getAdminUser } from "@/lib/auth";
 import type { CrmContact } from "@/lib/types";
@@ -17,6 +17,7 @@ export default function AdminCrmPage() {
   const [reminderMessage, setReminderMessage] = useState("");
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(false);
 
   // Bulk send states
@@ -28,31 +29,18 @@ export default function AdminCrmPage() {
   useEffect(() => {
     const loadContacts = async () => {
       try {
-        // Load from both sources
-        const localData = await getCrmContacts();
-
-        let backendData: CrmContact[] = [];
         const user = getAdminUser();
-        if (user?.cabang_id) {
-          try {
-            backendData = await getAntrianContacts(user.cabang_id);
-          } catch {
-            console.error("Gagal memuat kontak backend");
-          }
+        if (!user) {
+          setError("Sesi admin tidak ditemukan. Silakan login kembali.");
+          return;
         }
-
-        // Merge and deduplicate by no_wa (backend takes priority)
-        const contactMap = new Map<string, CrmContact>();
-        for (const c of backendData) {
-          contactMap.set(c.no_wa, c);
-        }
-        for (const c of localData) {
-          if (!contactMap.has(c.no_wa)) {
-            contactMap.set(c.no_wa, c);
-          }
-        }
-
-        setContacts(Array.from(contactMap.values()));
+        
+        const [dbData, localData] = await Promise.all([
+          getCustomerContacts(),
+          getLocalContacts()
+        ]);
+        
+        setContacts([...dbData, ...localData]);
       } catch (err) {
         console.error("Gagal memuat kontak:", err);
         setError("Gagal memuat kontak.");
@@ -238,8 +226,7 @@ export default function AdminCrmPage() {
             Kirim WA ke Banyak Kontak
           </h2>
           <p className="mt-2 text-sm text-zinc-600">
-            Kirim pesan WA ke beberapa kontak sekaligus dari daftar kontak
-            tersimpan.
+            Kirim pesan WA ke beberapa kontak sekaligus dari daftar kontak pelanggan.
           </p>
 
           {/* Info Banner */}
@@ -261,12 +248,13 @@ export default function AdminCrmPage() {
               <div className="ml-3">
                 <div className="text-sm text-emerald-800">
                   <p>
-                    Kontak diambil otomatis dari <strong>data antrian backend</strong> dan{" "}
+                    Kontak diambil dari <strong>database user</strong> dan <strong>kontak manual</strong>.
+                    Kelola kontak di{" "}
                     <a
                       href="/admin/crm/contacts"
                       className="underline hover:no-underline font-medium"
                     >
-                      kontak manual
+                      halaman kontak
                     </a>
                     .
                   </p>
@@ -278,15 +266,8 @@ export default function AdminCrmPage() {
           {contacts.length === 0 ? (
             <div className="mt-6 p-4 bg-zinc-50 border border-zinc-200 rounded-2xl">
               <p className="text-sm text-zinc-600">
-                Belum ada kontak tersedia. Kontak akan muncul otomatis dari data
-                antrian, atau{" "}
-                <a
-                  href="/admin/crm/contacts"
-                  className="underline hover:no-underline font-medium text-emerald-700"
-                >
-                  tambah kontak manual
-                </a>
-                .
+                Belum ada kontak tersedia. Kontak akan muncul otomatis jika
+                pelanggan telah melengkapi nomor WhatsApp di profil mereka.
               </p>
             </div>
           ) : (

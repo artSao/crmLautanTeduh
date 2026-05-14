@@ -81,8 +81,3 @@ export type CrmContact = {
   no_wa: string;
   created_at: string;
 };
-
-export type CrmContactPayload = {
-  nama: string;
-  no_wa: string;
-};

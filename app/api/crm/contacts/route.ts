@@ -1,109 +1,104 @@
-import { NextRequest, NextResponse } from "next/server";
-import { promises as fs } from "fs";
+import { NextResponse } from "next/server";
+import fs from "fs";
 import path from "path";
-import type { CrmContact, CrmContactPayload } from "@/lib/types";
+import { CrmContact } from "@/lib/types";
 
-const CONTACTS_FILE = path.join(process.cwd(), "data", "contacts.json");
+const dataFilePath = path.join(process.cwd(), "data", "crm_contacts.json");
 
-// Ensure data directory exists
-async function ensureDataDir() {
-  const dataDir = path.join(process.cwd(), "data");
-  try {
-    await fs.access(dataDir);
-  } catch {
-    await fs.mkdir(dataDir, { recursive: true });
+// Helper to ensure directory and file exists
+function ensureFileExists() {
+  const dir = path.join(process.cwd(), "data");
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
-}
-
-// Read contacts from file
-async function readContacts(): Promise<CrmContact[]> {
-  try {
-    await ensureDataDir();
-    const data = await fs.readFile(CONTACTS_FILE, "utf-8");
-    return JSON.parse(data) as CrmContact[];
-  } catch {
-    return [];
+  if (!fs.existsSync(dataFilePath)) {
+    fs.writeFileSync(dataFilePath, JSON.stringify([]));
   }
-}
-
-// Write contacts to file
-async function writeContacts(contacts: CrmContact[]): Promise<void> {
-  await ensureDataDir();
-  await fs.writeFile(CONTACTS_FILE, JSON.stringify(contacts, null, 2));
-}
-
-// Simple auth check (skip for demo)
-function checkAuth(): boolean {
-  // For demo purposes, skip auth
-  return true;
-  // In production, verify Bearer token
-  // const authHeader = request.headers.get("authorization");
-  // if (!authHeader || !authHeader.startsWith("Bearer ")) return false;
-  // const token = authHeader.substring(7);
-  // return verifyToken(token); // Implement token verification
 }
 
 export async function GET() {
-  if (!checkAuth()) {
-    return NextResponse.json(
-      { success: false, message: "Unauthorized" },
-      { status: 401 },
-    );
-  }
-
   try {
-    const contacts = await readContacts();
-    return NextResponse.json({
-      success: true,
-      data: contacts,
-    });
+    ensureFileExists();
+    const fileData = fs.readFileSync(dataFilePath, "utf8");
+    const contacts: CrmContact[] = JSON.parse(fileData);
+    return NextResponse.json({ contacts });
   } catch (error) {
-    console.error("Error fetching contacts:", error);
+    console.error("Error reading contacts:", error);
     return NextResponse.json(
-      { success: false, message: "Failed to fetch contacts" },
-      { status: 500 },
+      { error: "Gagal membaca kontak manual" },
+      { status: 500 }
     );
   }
 }
 
-export async function POST(request: NextRequest) {
-  if (!checkAuth()) {
-    return NextResponse.json(
-      { success: false, message: "Unauthorized" },
-      { status: 401 },
-    );
-  }
-
+export async function POST(request: Request) {
   try {
-    const body: CrmContactPayload = await request.json();
+    ensureFileExists();
+    const { nama, no_wa } = await request.json();
 
-    if (!body.nama || !body.no_wa) {
+    if (!nama || !no_wa) {
       return NextResponse.json(
-        { success: false, message: "Nama and no_wa are required" },
-        { status: 400 },
+        { error: "Nama dan Nomor WA wajib diisi" },
+        { status: 400 }
       );
     }
 
-    const contacts = await readContacts();
+    const fileData = fs.readFileSync(dataFilePath, "utf8");
+    const contacts: CrmContact[] = JSON.parse(fileData);
+
+    // Check duplicate
+    if (contacts.some((c) => c.no_wa === no_wa)) {
+      return NextResponse.json(
+        { error: "Nomor WA sudah tersimpan" },
+        { status: 400 }
+      );
+    }
+
     const newContact: CrmContact = {
       id: Date.now(),
-      nama: body.nama.trim(),
-      no_wa: body.no_wa.trim(),
+      nama,
+      no_wa,
       created_at: new Date().toISOString(),
     };
 
     contacts.push(newContact);
-    await writeContacts(contacts);
+    fs.writeFileSync(dataFilePath, JSON.stringify(contacts, null, 2));
 
-    return NextResponse.json({
-      success: true,
-      data: newContact,
-    });
+    return NextResponse.json({ success: true, contact: newContact });
   } catch (error) {
-    console.error("Error creating contact:", error);
+    console.error("Error writing contact:", error);
     return NextResponse.json(
-      { success: false, message: "Failed to create contact" },
-      { status: 500 },
+      { error: "Gagal menyimpan kontak manual" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "ID kontak tidak valid" },
+        { status: 400 }
+      );
+    }
+
+    ensureFileExists();
+    const fileData = fs.readFileSync(dataFilePath, "utf8");
+    let contacts: CrmContact[] = JSON.parse(fileData);
+
+    contacts = contacts.filter((c) => c.id !== Number(id));
+    fs.writeFileSync(dataFilePath, JSON.stringify(contacts, null, 2));
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting contact:", error);
+    return NextResponse.json(
+      { error: "Gagal menghapus kontak manual" },
+      { status: 500 }
     );
   }
 }

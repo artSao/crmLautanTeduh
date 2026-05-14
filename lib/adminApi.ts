@@ -4,7 +4,6 @@ import type {
   Broadcast,
   BroadcastPayload,
   CrmContact,
-  CrmContactPayload,
   CrmReminderPayload,
   CrmSendPayload,
 } from "@/lib/types";
@@ -155,46 +154,6 @@ export async function createBroadcast(
   ).then((payload) => payload.data);
 }
 
-const LOCAL_CRM_CONTACTS_API = "/api/crm/contacts";
-
-export async function getCrmContacts(): Promise<CrmContact[]> {
-  return fetchJson<{ success: boolean; data: CrmContact[] }>(
-    LOCAL_CRM_CONTACTS_API,
-    {
-      headers: {
-        "Content-Type": "application/json",
-      },
-    },
-  ).then((payload) => payload.data);
-}
-
-export async function createCrmContact(
-  payload: CrmContactPayload,
-): Promise<CrmContact> {
-  return fetchJson<{ success: boolean; data: CrmContact }>(
-    LOCAL_CRM_CONTACTS_API,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    },
-  ).then((payload) => payload.data);
-}
-
-export async function deleteCrmContact(id: number): Promise<void> {
-  await fetchJson<{ success: boolean; message: string }>(
-    `${LOCAL_CRM_CONTACTS_API}/${id}`,
-    {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    },
-  );
-}
-
 export async function getBroadcastList(): Promise<Broadcast[]> {
   return fetchJson<{ success: boolean; data: Broadcast[] }>(
     `${API_BASE_URL}/broadcast/all`,
@@ -208,33 +167,113 @@ export async function getBroadcastList(): Promise<Broadcast[]> {
 }
 
 /**
- * Ambil daftar kontak pelanggan dari data antrian di backend.
- * Kontak di-deduplikasi berdasarkan nomor WA/HP,
- * dan hanya menyimpan data terbaru per nomor.
+ * Ambil kontak WhatsApp user yang sedang login
  */
-export async function getAntrianContacts(
-  cabangId: number,
-): Promise<CrmContact[]> {
-  const antrians = await getAdminCabangQueue(cabangId);
-
-  const contactMap = new Map<string, CrmContact>();
-  for (const a of antrians) {
-    const noWa = a.no_wa_reminder || a.no_hp;
-    if (!noWa) continue;
-
-    const existing = contactMap.get(noWa);
-    if (
-      !existing ||
-      new Date(a.created_at) > new Date(existing.created_at)
-    ) {
-      contactMap.set(noWa, {
-        id: a.id,
-        nama: a.nama_pemilik,
-        no_wa: noWa,
-        created_at: a.created_at,
-      });
-    }
+export async function getUserKontak(): Promise<{ user_id: number; no_wa: string } | null> {
+  try {
+    const payload = await fetchJson<{ success: boolean; data: { user_id: number; no_wa: string } }>(
+      `${API_BASE_URL}/users/kontak`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+      },
+    );
+    return payload.data;
+  } catch (err: any) {
+    // If empty or not found
+    return null;
   }
+}
 
-  return Array.from(contactMap.values());
+/**
+ * Ambil daftar kontak pelanggan (user) yang sudah mendaftarkan nomor WA-nya.
+ * Mengambil dari data user yang ada di database.
+ */
+export async function getCustomerContacts(): Promise<CrmContact[]> {
+  const payload = await fetchJson<{ success: boolean; data: any[] }>(
+    `${API_BASE_URL}/admin/users/kontak`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+    },
+  );
+
+  const contacts = payload.data || [];
+  
+  return contacts
+    .filter((u: any) => u.no_wa && u.no_wa.trim() !== "")
+    .map((u: any) => ({
+      id: u.id || u.user_id,
+      nama: u.name || u.nama || "Pelanggan",
+      no_wa: u.no_wa,
+      created_at: u.updated_at || u.created_at || new Date().toISOString(),
+    }));
+}
+
+export async function saveUserKontak(no_wa: string): Promise<void> {
+  await fetchJson<{ success: boolean }>(`${API_BASE_URL}/users/kontak`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ no_wa }),
+  });
+}
+
+export async function updateUserKontak(no_wa: string): Promise<void> {
+  await fetchJson<{ success: boolean }>(`${API_BASE_URL}/users/kontak`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ no_wa }),
+  });
+}
+
+export async function deleteUserKontak(): Promise<void> {
+  await fetchJson<{ success: boolean }>(`${API_BASE_URL}/users/kontak`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+  });
+}
+
+// ==========================================
+// MANUAL JSON CONTACTS API
+// ==========================================
+
+export async function getLocalContacts(): Promise<CrmContact[]> {
+  const res = await fetch("/api/crm/contacts");
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.contacts || [];
+}
+
+export async function addLocalContact(payload: { nama: string; no_wa: string }): Promise<void> {
+  const res = await fetch("/api/crm/contacts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error || "Gagal menambah kontak manual");
+  }
+}
+
+export async function deleteLocalContact(id: number): Promise<void> {
+  const res = await fetch(`/api/crm/contacts?id=${id}`, {
+    method: "DELETE"
+  });
+  if (!res.ok) {
+    throw new Error("Gagal menghapus kontak manual");
+  }
 }

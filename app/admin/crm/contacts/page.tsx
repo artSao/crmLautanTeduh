@@ -2,129 +2,88 @@
 
 import { useEffect, useState } from "react";
 import {
-  createCrmContact,
-  deleteCrmContact,
-  getCrmContacts,
-  getAntrianContacts,
+  getCustomerContacts,
+  getLocalContacts,
+  addLocalContact,
+  deleteLocalContact,
 } from "@/lib/adminApi";
 import { getAdminUser } from "@/lib/auth";
-import type { CrmContact, CrmContactPayload } from "@/lib/types";
-
-type TabType = "backend" | "manual";
+import type { CrmContact } from "@/lib/types";
 
 export default function CrmContactsPage() {
-  const [activeTab, setActiveTab] = useState<TabType>("backend");
-
-  // Backend contacts (from antrian data)
-  const [backendContacts, setBackendContacts] = useState<CrmContact[]>([]);
-  const [backendLoading, setBackendLoading] = useState(true);
-  const [backendError, setBackendError] = useState<string | null>(null);
-
-  // Local contacts (from JSON)
+  const [dbContacts, setDbContacts] = useState<CrmContact[]>([]);
   const [localContacts, setLocalContacts] = useState<CrmContact[]>([]);
-  const [localLoading, setLocalLoading] = useState(true);
-
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [formData, setFormData] = useState<CrmContactPayload>({
-    nama: "",
-    no_wa: "",
-  });
-  const [submitting, setSubmitting] = useState(false);
 
-  // Load backend contacts from antrian data
+  const [newNama, setNewNama] = useState("");
+  const [newNoWa, setNewNoWa] = useState("");
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
-    const loadBackendContacts = async () => {
+    const loadContacts = async () => {
       try {
-        setBackendLoading(true);
-        setBackendError(null);
+        setLoading(true);
+        setError(null);
         const user = getAdminUser();
-        if (!user?.cabang_id) {
-          setBackendError(
-            "Cabang ID tidak ditemukan. Pastikan akun admin terikat ke cabang.",
-          );
+        if (!user) {
+          setError("Sesi admin tidak ditemukan. Silakan login kembali.");
           return;
         }
-        const data = await getAntrianContacts(user.cabang_id);
-        setBackendContacts(data);
+
+        const [dbData, localData] = await Promise.all([
+          getCustomerContacts(),
+          getLocalContacts(),
+        ]);
+
+        setDbContacts(dbData);
+        setLocalContacts(localData);
       } catch (err) {
-        setBackendError(
+        setError(
           err instanceof Error
             ? err.message
-            : "Gagal memuat kontak dari backend.",
+            : "Gagal memuat kontak dari database.",
         );
       } finally {
-        setBackendLoading(false);
+        setLoading(false);
       }
     };
-    loadBackendContacts();
+    loadContacts();
   }, []);
 
-  // Load local contacts
-  useEffect(() => {
-    const loadLocalContacts = async () => {
-      try {
-        setLocalLoading(true);
-        const data = await getCrmContacts();
-        setLocalContacts(data);
-      } catch (err) {
-        console.error("Gagal memuat kontak lokal:", err);
-      } finally {
-        setLocalLoading(false);
-      }
-    };
-    loadLocalContacts();
-  }, []);
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleAddLocalContact = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.nama.trim() || !formData.no_wa.trim()) {
-      setError("Nama dan nomor WA harus diisi");
-      return;
-    }
+    if (!newNama.trim() || !newNoWa.trim()) return;
 
     try {
-      setSubmitting(true);
+      setSaving(true);
       setError(null);
-
-      const newContact = await createCrmContact({
-        nama: formData.nama.trim(),
-        no_wa: formData.no_wa.trim(),
-      });
-
-      setLocalContacts((prev) => [...prev, newContact]);
-      setFormData({ nama: "", no_wa: "" });
+      await addLocalContact({ nama: newNama.trim(), no_wa: newNoWa.trim() });
+      
+      const localData = await getLocalContacts();
+      setLocalContacts(localData);
+      
+      setNewNama("");
+      setNewNoWa("");
     } catch (err) {
-      setError("Gagal menambah kontak");
-      console.error(err);
+      setError(err instanceof Error ? err.message : "Gagal menambah kontak manual");
     } finally {
-      setSubmitting(false);
+      setSaving(false);
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus kontak ini?")) {
-      return;
-    }
-
+  const handleDeleteLocalContact = async (id: number) => {
+    if (!confirm("Hapus kontak manual ini?")) return;
     try {
-      await deleteCrmContact(id);
-      setLocalContacts((prev) =>
-        prev.filter((contact) => contact.id !== id),
-      );
+      await deleteLocalContact(id);
+      const localData = await getLocalContacts();
+      setLocalContacts(localData);
     } catch (err) {
-      setError("Gagal menghapus kontak");
-      console.error(err);
+      setError(err instanceof Error ? err.message : "Gagal menghapus kontak manual");
     }
   };
 
-  const tabs: { key: TabType; label: string; count: number }[] = [
-    {
-      key: "backend",
-      label: "Dari Data Antrian",
-      count: backendContacts.length,
-    },
-    { key: "manual", label: "Kontak Manual", count: localContacts.length },
-  ];
+  const allContacts = [...dbContacts, ...localContacts];
 
   return (
     <div className="space-y-8">
@@ -136,14 +95,13 @@ export default function CrmContactsPage() {
               Kelola Kontak WA
             </h1>
             <p className="mt-2 text-sm text-zinc-600">
-              Lihat kontak pelanggan dari data antrian (backend) atau tambah
-              kontak manual untuk pengiriman CRM WhatsApp.
+              Daftar kontak pelanggan dari database dan tambahan manual (JSON).
             </p>
           </div>
           <div className="text-right">
             <p className="text-sm text-zinc-500">Total kontak</p>
             <p className="text-3xl font-semibold text-emerald-700">
-              {backendContacts.length + localContacts.length}
+              {allContacts.length}
             </p>
           </div>
         </div>
@@ -156,26 +114,51 @@ export default function CrmContactsPage() {
         </div>
       )}
 
-      {/* Tab Navigation */}
-      <div className="flex gap-2">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key)}
-            className={`rounded-full px-5 py-2.5 text-sm font-medium transition ${
-              activeTab === tab.key
-                ? "bg-emerald-950 text-white"
-                : "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
-            }`}
-          >
-            {tab.label} ({tab.count})
-          </button>
-        ))}
-      </div>
+      <div className="grid gap-8 xl:grid-cols-2">
+        {/* Tambah Manual Form */}
+        <section className="rounded-[32px] border border-zinc-200 bg-white p-8 shadow-sm">
+          <h2 className="text-xl font-semibold text-zinc-950">
+            Tambah Kontak Manual
+          </h2>
+          <p className="mt-2 text-sm text-zinc-600">
+            Tambahkan nomor pelanggan secara manual ke file lokal (JSON).
+          </p>
+          <form onSubmit={handleAddLocalContact} className="mt-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-700">
+                Nama Pelanggan
+              </label>
+              <input
+                value={newNama}
+                onChange={(e) => setNewNama(e.target.value)}
+                placeholder="Budi Santoso"
+                className="mt-2 w-full rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700">
+                Nomor WA
+              </label>
+              <input
+                value={newNoWa}
+                onChange={(e) => setNewNoWa(e.target.value)}
+                placeholder="081234567890"
+                className="mt-2 w-full rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-full bg-emerald-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-60"
+            >
+              {saving ? "Menyimpan..." : "Simpan Kontak"}
+            </button>
+          </form>
+        </section>
 
-      {/* Backend Contacts Tab */}
-      {activeTab === "backend" && (
+        {/* Contacts List */}
         <section className="rounded-[32px] border border-zinc-200 bg-white p-8 shadow-sm">
           <div className="mb-6 flex items-start gap-4">
             <div className="rounded-2xl bg-emerald-50 p-3">
@@ -195,191 +178,66 @@ export default function CrmContactsPage() {
             </div>
             <div>
               <h2 className="text-xl font-semibold text-zinc-950">
-                Kontak dari Data Antrian (Backend)
+                Semua Kontak
               </h2>
               <p className="mt-1 text-sm text-zinc-600">
-                Kontak pelanggan diambil otomatis dari data antrian di database
-                backend. Setiap kali pelanggan mengambil antrian, nomor mereka
-                otomatis tersedia di sini.
+                Daftar gabungan kontak dari database dan tambahan manual.
               </p>
             </div>
           </div>
 
-          {backendLoading ? (
+          {loading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="text-sm text-zinc-500">
-                Memuat kontak dari backend...
-              </div>
+              <div className="text-sm text-zinc-500">Memuat kontak...</div>
             </div>
-          ) : backendError ? (
-            <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
-              {backendError}
-            </div>
-          ) : backendContacts.length === 0 ? (
+          ) : allContacts.length === 0 ? (
             <div className="rounded-3xl border border-zinc-100 bg-zinc-50 p-8 text-center">
               <p className="text-sm text-zinc-500">
-                Belum ada data antrian di cabang ini. Kontak akan muncul
-                otomatis saat pelanggan mengambil antrian.
+                Belum ada data pelanggan tersedia.
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {backendContacts.map((contact) => (
-                <div
-                  key={`backend-${contact.no_wa}`}
-                  className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50 p-4 transition hover:border-emerald-200 hover:bg-emerald-50/30"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-800">
-                      {contact.nama.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="font-medium text-zinc-950">
-                        {contact.nama}
-                      </p>
-                      <p className="text-sm text-zinc-600">{contact.no_wa}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800">
-                      Backend
-                    </span>
-                    <span className="text-xs text-zinc-400">
-                      {new Date(contact.created_at).toLocaleDateString("id-ID")}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Manual Contacts Tab */}
-      {activeTab === "manual" && (
-        <div className="space-y-8">
-          {/* Form Tambah Kontak */}
-          <section className="rounded-[32px] border border-zinc-200 bg-white p-8 shadow-sm">
-            <h2 className="text-xl font-semibold text-zinc-950">
-              Tambah Kontak Manual
-            </h2>
-            <p className="mt-2 text-sm text-zinc-600">
-              Tambah kontak WA secara manual untuk pelanggan yang belum ada di
-              data antrian.
-            </p>
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor="nama"
-                    className="block text-sm font-medium text-zinc-700"
-                  >
-                    Nama
-                  </label>
-                  <input
-                    type="text"
-                    id="nama"
-                    value={formData.nama}
-                    onChange={(e) =>
-                      setFormData({ ...formData, nama: e.target.value })
-                    }
-                    className="mt-2 w-full rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                    placeholder="Nama pelanggan"
-                    required
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="no_wa"
-                    className="block text-sm font-medium text-zinc-700"
-                  >
-                    Nomor WhatsApp
-                  </label>
-                  <input
-                    type="text"
-                    id="no_wa"
-                    value={formData.no_wa}
-                    onChange={(e) =>
-                      setFormData({ ...formData, no_wa: e.target.value })
-                    }
-                    className="mt-2 w-full rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                    placeholder="081234567890"
-                    required
-                  />
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="rounded-full bg-emerald-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-60"
-              >
-                {submitting ? "Menyimpan..." : "Tambah Kontak"}
-              </button>
-            </form>
-          </section>
-
-          {/* Daftar Kontak Manual */}
-          <section className="rounded-[32px] border border-zinc-200 bg-white p-8 shadow-sm">
-            <h2 className="text-xl font-semibold text-zinc-950">
-              Daftar Kontak Manual ({localContacts.length})
-            </h2>
-
-            {localLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-sm text-zinc-500">
-                  Memuat kontak lokal...
-                </div>
-              </div>
-            ) : localContacts.length === 0 ? (
-              <div className="mt-6 rounded-3xl border border-zinc-100 bg-zinc-50 p-8 text-center">
-                <p className="text-sm text-zinc-500">
-                  Belum ada kontak manual yang ditambahkan.
-                </p>
-              </div>
-            ) : (
-              <div className="mt-6 space-y-3">
-                {localContacts.map((contact) => (
+            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+              {allContacts.map((contact) => {
+                const isLocal = localContacts.some((c) => c.id === contact.id);
+                return (
                   <div
-                    key={`local-${contact.id}`}
-                    className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50 p-4 transition hover:border-sky-200 hover:bg-sky-50/30"
+                    key={`contact-${contact.id}`}
+                    className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50 p-4 transition hover:border-emerald-200 hover:bg-emerald-50/30"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-100 text-sm font-semibold text-sky-800">
+                      <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold ${isLocal ? 'bg-sky-100 text-sky-800' : 'bg-emerald-100 text-emerald-800'}`}>
                         {contact.nama.charAt(0).toUpperCase()}
                       </div>
                       <div>
                         <p className="font-medium text-zinc-950">
                           {contact.nama}
                         </p>
-                        <p className="text-sm text-zinc-600">
-                          {contact.no_wa}
-                        </p>
+                        <p className="text-sm text-zinc-600">{contact.no_wa}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-800">
-                        Manual
+                      <span className={`rounded-full px-3 py-1 text-xs font-medium ${isLocal ? 'bg-sky-100 text-sky-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                        {isLocal ? 'Manual' : 'Database'}
                       </span>
-                      <span className="text-xs text-zinc-400">
-                        {new Date(contact.created_at).toLocaleDateString(
-                          "id-ID",
-                        )}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(contact.id)}
-                        className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-200"
-                      >
-                        Hapus
-                      </button>
+                      {isLocal && (
+                        <button
+                          onClick={() => handleDeleteLocalContact(contact.id)}
+                          className="text-rose-500 hover:text-rose-700"
+                        >
+                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
-      )}
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
