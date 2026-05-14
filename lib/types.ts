@@ -14,6 +14,7 @@ export type AdminUser = {
   username: string;
   role: "admin";
   cabang_id: number | null;
+  cabang_nama?: string;
 };
 
 export type AdminLoginResponse = {

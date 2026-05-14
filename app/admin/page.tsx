@@ -8,6 +8,7 @@ import { getAdminCabangQueue } from "@/lib/adminApi";
 export default function AdminPage() {
   const [adminName, setAdminName] = useState("");
   const [cabangId, setCabangId] = useState<number | null>(null);
+  const [cabangNama, setCabangNama] = useState<string | null>(null);
   const [summary, setSummary] = useState({
     menunggu: 0,
     dipanggil: 0,
@@ -22,6 +23,7 @@ export default function AdminPage() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAdminName(user.name);
       setCabangId(user.cabang_id);
+      setCabangNama(user.cabang_nama ?? null);
     }
   }, []);
 
@@ -93,11 +95,11 @@ export default function AdminPage() {
           <p className="text-sm uppercase tracking-[0.24em] text-zinc-500">
             Cabang
           </p>
-          <p className="mt-4 text-4xl font-semibold text-zinc-950">
-            {cabangId ?? "-"}
+          <p className="mt-4 text-2xl font-semibold text-zinc-950">
+            {cabangNama ?? (cabangId ? `Cabang #${cabangId}` : "Super Admin")}
           </p>
           <p className="mt-2 text-sm text-zinc-600">
-            ID cabang admin yang sedang login.
+            Cabang bengkel yang sedang dikelola.
           </p>
         </div>
         <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">

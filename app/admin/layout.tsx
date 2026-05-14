@@ -66,7 +66,7 @@ export default function AdminLayout({
             </p>
             <p className="mt-1 text-sm text-zinc-600">
               {admin
-                ? `Halo, ${admin.name} — Cabang ${admin.cabang_id ?? "tidak tersedia"}`
+                ? `Halo, ${admin.name} — ${admin.cabang_nama ?? (admin.cabang_id ? `Cabang #${admin.cabang_id}` : "Super Admin")}`
                 : "Admin tidak ditemukan"}
             </p>
           </div>

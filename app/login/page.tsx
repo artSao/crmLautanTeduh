@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { adminLogin } from "@/lib/adminApi";
+import { getCabangById } from "@/lib/api";
 import { saveAdminAuth } from "@/lib/auth";
 
 export default function LoginPage() {
@@ -19,6 +20,17 @@ export default function LoginPage() {
 
     try {
       const data = await adminLogin(username.trim(), password);
+
+      // Fetch nama cabang jika admin terikat ke cabang
+      if (data.user.cabang_id) {
+        try {
+          const cabang = await getCabangById(data.user.cabang_id);
+          data.user.cabang_nama = cabang.nama;
+        } catch {
+          // Tetap lanjutkan login meskipun fetch cabang gagal
+        }
+      }
+
       saveAdminAuth(data.token, data.user);
       router.push("/admin");
     } catch (err) {
