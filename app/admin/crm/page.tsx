@@ -5,7 +5,9 @@ import {
   sendCrmMessage,
   sendCrmReminder,
   getCrmContacts,
+  getAntrianContacts,
 } from "@/lib/adminApi";
+import { getAdminUser } from "@/lib/auth";
 import type { CrmContact } from "@/lib/types";
 
 export default function AdminCrmPage() {
@@ -26,11 +28,34 @@ export default function AdminCrmPage() {
   useEffect(() => {
     const loadContacts = async () => {
       try {
-        const data = await getCrmContacts();
-        setContacts(data);
+        // Load from both sources
+        const localData = await getCrmContacts();
+
+        let backendData: CrmContact[] = [];
+        const user = getAdminUser();
+        if (user?.cabang_id) {
+          try {
+            backendData = await getAntrianContacts(user.cabang_id);
+          } catch {
+            console.error("Gagal memuat kontak backend");
+          }
+        }
+
+        // Merge and deduplicate by no_wa (backend takes priority)
+        const contactMap = new Map<string, CrmContact>();
+        for (const c of backendData) {
+          contactMap.set(c.no_wa, c);
+        }
+        for (const c of localData) {
+          if (!contactMap.has(c.no_wa)) {
+            contactMap.set(c.no_wa, c);
+          }
+        }
+
+        setContacts(Array.from(contactMap.values()));
       } catch (err) {
         console.error("Gagal memuat kontak:", err);
-        setError("Gagal memuat kontak dari database.");
+        setError("Gagal memuat kontak.");
       }
     };
     loadContacts();
@@ -217,32 +242,31 @@ export default function AdminCrmPage() {
             tersimpan.
           </p>
 
-          {/* Warning Banner */}
-          <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          {/* Info Banner */}
+          <div className="mt-4 bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <svg
-                  className="h-5 w-5 text-yellow-400"
+                  className="h-5 w-5 text-emerald-500"
                   viewBox="0 0 20 20"
                   fill="currentColor"
                 >
                   <path
                     fillRule="evenodd"
-                    d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
                     clipRule="evenodd"
                   />
                 </svg>
               </div>
               <div className="ml-3">
-                <div className="text-sm text-yellow-700">
+                <div className="text-sm text-emerald-800">
                   <p>
-                    Kontak WA diambil dari database backend. Pastikan kontak
-                    sudah ditambahkan di halaman{" "}
+                    Kontak diambil otomatis dari <strong>data antrian backend</strong> dan{" "}
                     <a
                       href="/admin/crm/contacts"
                       className="underline hover:no-underline font-medium"
                     >
-                      Kelola Kontak WA
+                      kontak manual
                     </a>
                     .
                   </p>
@@ -252,16 +276,17 @@ export default function AdminCrmPage() {
           </div>
 
           {contacts.length === 0 ? (
-            <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-sm text-yellow-800">
-                Belum ada kontak tersimpan.{" "}
+            <div className="mt-6 p-4 bg-zinc-50 border border-zinc-200 rounded-2xl">
+              <p className="text-sm text-zinc-600">
+                Belum ada kontak tersedia. Kontak akan muncul otomatis dari data
+                antrian, atau{" "}
                 <a
                   href="/admin/crm/contacts"
-                  className="underline hover:no-underline"
+                  className="underline hover:no-underline font-medium text-emerald-700"
                 >
-                  Kelola kontak WA
-                </a>{" "}
-                untuk menambah kontak baru.
+                  tambah kontak manual
+                </a>
+                .
               </p>
             </div>
           ) : (

@@ -5,12 +5,25 @@ import {
   createCrmContact,
   deleteCrmContact,
   getCrmContacts,
+  getAntrianContacts,
 } from "@/lib/adminApi";
+import { getAdminUser } from "@/lib/auth";
 import type { CrmContact, CrmContactPayload } from "@/lib/types";
 
+type TabType = "backend" | "manual";
+
 export default function CrmContactsPage() {
-  const [contacts, setContacts] = useState<CrmContact[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabType>("backend");
+
+  // Backend contacts (from antrian data)
+  const [backendContacts, setBackendContacts] = useState<CrmContact[]>([]);
+  const [backendLoading, setBackendLoading] = useState(true);
+  const [backendError, setBackendError] = useState<string | null>(null);
+
+  // Local contacts (from JSON)
+  const [localContacts, setLocalContacts] = useState<CrmContact[]>([]);
+  const [localLoading, setLocalLoading] = useState(true);
+
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<CrmContactPayload>({
     nama: "",
@@ -18,25 +31,48 @@ export default function CrmContactsPage() {
   });
   const [submitting, setSubmitting] = useState(false);
 
-  const loadContacts = async () => {
-    try {
-      setLoading(true);
-      const data = await getCrmContacts();
-      setContacts(data);
-    } catch (err) {
-      setError("Gagal memuat kontak dari database");
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Load backend contacts from antrian data
   useEffect(() => {
-    async function fetchContacts() {
-      await loadContacts();
-    }
+    const loadBackendContacts = async () => {
+      try {
+        setBackendLoading(true);
+        setBackendError(null);
+        const user = getAdminUser();
+        if (!user?.cabang_id) {
+          setBackendError(
+            "Cabang ID tidak ditemukan. Pastikan akun admin terikat ke cabang.",
+          );
+          return;
+        }
+        const data = await getAntrianContacts(user.cabang_id);
+        setBackendContacts(data);
+      } catch (err) {
+        setBackendError(
+          err instanceof Error
+            ? err.message
+            : "Gagal memuat kontak dari backend.",
+        );
+      } finally {
+        setBackendLoading(false);
+      }
+    };
+    loadBackendContacts();
+  }, []);
 
-    fetchContacts();
+  // Load local contacts
+  useEffect(() => {
+    const loadLocalContacts = async () => {
+      try {
+        setLocalLoading(true);
+        const data = await getCrmContacts();
+        setLocalContacts(data);
+      } catch (err) {
+        console.error("Gagal memuat kontak lokal:", err);
+      } finally {
+        setLocalLoading(false);
+      }
+    };
+    loadLocalContacts();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,7 +91,7 @@ export default function CrmContactsPage() {
         no_wa: formData.no_wa.trim(),
       });
 
-      setContacts((prev) => [...prev, newContact]);
+      setLocalContacts((prev) => [...prev, newContact]);
       setFormData({ nama: "", no_wa: "" });
     } catch (err) {
       setError("Gagal menambah kontak");
@@ -72,150 +108,278 @@ export default function CrmContactsPage() {
 
     try {
       await deleteCrmContact(id);
-      setContacts((prev) => prev.filter((contact) => contact.id !== id));
+      setLocalContacts((prev) =>
+        prev.filter((contact) => contact.id !== id),
+      );
     } catch (err) {
       setError("Gagal menghapus kontak");
       console.error(err);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-lg">Memuat...</div>
-      </div>
-    );
-  }
+  const tabs: { key: TabType; label: string; count: number }[] = [
+    {
+      key: "backend",
+      label: "Dari Data Antrian",
+      count: backendContacts.length,
+    },
+    { key: "manual", label: "Kontak Manual", count: localContacts.length },
+  ];
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Kelola Kontak WA</h1>
+    <div className="space-y-8">
+      {/* Header */}
+      <section className="rounded-[32px] border border-zinc-200 bg-white p-10 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold text-zinc-950">
+              Kelola Kontak WA
+            </h1>
+            <p className="mt-2 text-sm text-zinc-600">
+              Lihat kontak pelanggan dari data antrian (backend) atau tambah
+              kontak manual untuk pengiriman CRM WhatsApp.
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-zinc-500">Total kontak</p>
+            <p className="text-3xl font-semibold text-emerald-700">
+              {backendContacts.length + localContacts.length}
+            </p>
+          </div>
+        </div>
+      </section>
 
-        {/* Information Banner */}
-        <div className="bg-sky-50 border border-sky-200 rounded-lg p-4 mb-6">
-          <div className="flex items-center">
-            <div className="shrink-0">
+      {/* Error */}
+      {error && (
+        <div className="rounded-3xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-900">
+          {error}
+        </div>
+      )}
+
+      {/* Tab Navigation */}
+      <div className="flex gap-2">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveTab(tab.key)}
+            className={`rounded-full px-5 py-2.5 text-sm font-medium transition ${
+              activeTab === tab.key
+                ? "bg-emerald-950 text-white"
+                : "border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+            }`}
+          >
+            {tab.label} ({tab.count})
+          </button>
+        ))}
+      </div>
+
+      {/* Backend Contacts Tab */}
+      {activeTab === "backend" && (
+        <section className="rounded-[32px] border border-zinc-200 bg-white p-8 shadow-sm">
+          <div className="mb-6 flex items-start gap-4">
+            <div className="rounded-2xl bg-emerald-50 p-3">
               <svg
-                className="h-5 w-5 text-sky-400"
-                viewBox="0 0 20 20"
-                fill="currentColor"
+                className="h-6 w-6 text-emerald-700"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
               >
                 <path
-                  fillRule="evenodd"
-                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                  clipRule="evenodd"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125v-3.75"
                 />
               </svg>
             </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-sky-800">
-                Kontak Disimpan di Database Backend
-              </h3>
-              <div className="mt-2 text-sm text-sky-700">
-                <p>
-                  Kontak WA sekarang disimpan melalui API ke backend dan
-                  dipertahankan di file `data/contacts.json`.
-                </p>
+            <div>
+              <h2 className="text-xl font-semibold text-zinc-950">
+                Kontak dari Data Antrian (Backend)
+              </h2>
+              <p className="mt-1 text-sm text-zinc-600">
+                Kontak pelanggan diambil otomatis dari data antrian di database
+                backend. Setiap kali pelanggan mengambil antrian, nomor mereka
+                otomatis tersedia di sini.
+              </p>
+            </div>
+          </div>
+
+          {backendLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-sm text-zinc-500">
+                Memuat kontak dari backend...
               </div>
             </div>
-          </div>
-        </div>
-
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-            {error}
-          </div>
-        )}
-
-        {/* Form Tambah Kontak */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4">Tambah Kontak Baru</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label
-                htmlFor="nama"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Nama
-              </label>
-              <input
-                type="text"
-                id="nama"
-                value={formData.nama}
-                onChange={(e) =>
-                  setFormData({ ...formData, nama: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Masukkan nama kontak"
-                required
-              />
+          ) : backendError ? (
+            <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+              {backendError}
             </div>
-            <div>
-              <label
-                htmlFor="no_wa"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Nomor WhatsApp
-              </label>
-              <input
-                type="text"
-                id="no_wa"
-                value={formData.no_wa}
-                onChange={(e) =>
-                  setFormData({ ...formData, no_wa: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Masukkan nomor WA (contoh: 6281234567890)"
-                required
-              />
+          ) : backendContacts.length === 0 ? (
+            <div className="rounded-3xl border border-zinc-100 bg-zinc-50 p-8 text-center">
+              <p className="text-sm text-zinc-500">
+                Belum ada data antrian di cabang ini. Kontak akan muncul
+                otomatis saat pelanggan mengambil antrian.
+              </p>
             </div>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              {submitting ? "Menyimpan..." : "Tambah Kontak"}
-            </button>
-          </form>
-        </div>
-
-        {/* Daftar Kontak */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold mb-4">
-            Daftar Kontak ({contacts.length})
-          </h2>
-          {contacts.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">
-              Belum ada kontak yang ditambahkan
-            </p>
           ) : (
-            <div className="space-y-4">
-              {contacts.map((contact) => (
+            <div className="space-y-3">
+              {backendContacts.map((contact) => (
                 <div
-                  key={contact.id}
-                  className="flex items-center justify-between p-4 border border-gray-200 rounded-md"
+                  key={`backend-${contact.no_wa}`}
+                  className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50 p-4 transition hover:border-emerald-200 hover:bg-emerald-50/30"
                 >
-                  <div>
-                    <h3 className="font-medium">{contact.nama}</h3>
-                    <p className="text-gray-600">{contact.no_wa}</p>
-                    <p className="text-sm text-gray-500">
-                      Ditambahkan:{" "}
-                      {new Date(contact.created_at).toLocaleDateString("id-ID")}
-                    </p>
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-800">
+                      {contact.nama.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-medium text-zinc-950">
+                        {contact.nama}
+                      </p>
+                      <p className="text-sm text-zinc-600">{contact.no_wa}</p>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleDelete(contact.id)}
-                    className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500"
-                  >
-                    Hapus
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-800">
+                      Backend
+                    </span>
+                    <span className="text-xs text-zinc-400">
+                      {new Date(contact.created_at).toLocaleDateString("id-ID")}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
           )}
+        </section>
+      )}
+
+      {/* Manual Contacts Tab */}
+      {activeTab === "manual" && (
+        <div className="space-y-8">
+          {/* Form Tambah Kontak */}
+          <section className="rounded-[32px] border border-zinc-200 bg-white p-8 shadow-sm">
+            <h2 className="text-xl font-semibold text-zinc-950">
+              Tambah Kontak Manual
+            </h2>
+            <p className="mt-2 text-sm text-zinc-600">
+              Tambah kontak WA secara manual untuk pelanggan yang belum ada di
+              data antrian.
+            </p>
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="nama"
+                    className="block text-sm font-medium text-zinc-700"
+                  >
+                    Nama
+                  </label>
+                  <input
+                    type="text"
+                    id="nama"
+                    value={formData.nama}
+                    onChange={(e) =>
+                      setFormData({ ...formData, nama: e.target.value })
+                    }
+                    className="mt-2 w-full rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    placeholder="Nama pelanggan"
+                    required
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="no_wa"
+                    className="block text-sm font-medium text-zinc-700"
+                  >
+                    Nomor WhatsApp
+                  </label>
+                  <input
+                    type="text"
+                    id="no_wa"
+                    value={formData.no_wa}
+                    onChange={(e) =>
+                      setFormData({ ...formData, no_wa: e.target.value })
+                    }
+                    className="mt-2 w-full rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    placeholder="081234567890"
+                    required
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="rounded-full bg-emerald-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-60"
+              >
+                {submitting ? "Menyimpan..." : "Tambah Kontak"}
+              </button>
+            </form>
+          </section>
+
+          {/* Daftar Kontak Manual */}
+          <section className="rounded-[32px] border border-zinc-200 bg-white p-8 shadow-sm">
+            <h2 className="text-xl font-semibold text-zinc-950">
+              Daftar Kontak Manual ({localContacts.length})
+            </h2>
+
+            {localLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-sm text-zinc-500">
+                  Memuat kontak lokal...
+                </div>
+              </div>
+            ) : localContacts.length === 0 ? (
+              <div className="mt-6 rounded-3xl border border-zinc-100 bg-zinc-50 p-8 text-center">
+                <p className="text-sm text-zinc-500">
+                  Belum ada kontak manual yang ditambahkan.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-6 space-y-3">
+                {localContacts.map((contact) => (
+                  <div
+                    key={`local-${contact.id}`}
+                    className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50 p-4 transition hover:border-sky-200 hover:bg-sky-50/30"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-100 text-sm font-semibold text-sky-800">
+                        {contact.nama.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-medium text-zinc-950">
+                          {contact.nama}
+                        </p>
+                        <p className="text-sm text-zinc-600">
+                          {contact.no_wa}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-800">
+                        Manual
+                      </span>
+                      <span className="text-xs text-zinc-400">
+                        {new Date(contact.created_at).toLocaleDateString(
+                          "id-ID",
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(contact.id)}
+                        className="rounded-full bg-rose-100 px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-200"
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
-      </div>
+      )}
     </div>
   );
 }

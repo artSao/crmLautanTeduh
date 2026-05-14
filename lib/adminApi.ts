@@ -206,3 +206,35 @@ export async function getBroadcastList(): Promise<Broadcast[]> {
     },
   ).then((payload) => payload.data);
 }
+
+/**
+ * Ambil daftar kontak pelanggan dari data antrian di backend.
+ * Kontak di-deduplikasi berdasarkan nomor WA/HP,
+ * dan hanya menyimpan data terbaru per nomor.
+ */
+export async function getAntrianContacts(
+  cabangId: number,
+): Promise<CrmContact[]> {
+  const antrians = await getAdminCabangQueue(cabangId);
+
+  const contactMap = new Map<string, CrmContact>();
+  for (const a of antrians) {
+    const noWa = a.no_wa_reminder || a.no_hp;
+    if (!noWa) continue;
+
+    const existing = contactMap.get(noWa);
+    if (
+      !existing ||
+      new Date(a.created_at) > new Date(existing.created_at)
+    ) {
+      contactMap.set(noWa, {
+        id: a.id,
+        nama: a.nama_pemilik,
+        no_wa: noWa,
+        created_at: a.created_at,
+      });
+    }
+  }
+
+  return Array.from(contactMap.values());
+}
