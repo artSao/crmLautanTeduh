@@ -1,14 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  getCustomerContacts,
-  getLocalContacts,
-  addLocalContact,
-  deleteLocalContact,
-} from "@/lib/adminApi";
+import { getCustomerContacts } from "@/lib/adminApi";
 import { getAdminUser } from "@/lib/auth";
 import type { CrmContact } from "@/lib/types";
+
+const STORAGE_KEY = "lauttcrm-local-contacts";
 
 export default function CrmContactsPage() {
   const [dbContacts, setDbContacts] = useState<CrmContact[]>([]);
@@ -31,13 +28,20 @@ export default function CrmContactsPage() {
           return;
         }
 
-        const [dbData, localData] = await Promise.all([
-          getCustomerContacts(),
-          getLocalContacts(),
-        ]);
+        const dbData = await getCustomerContacts();
+        const saved = window.localStorage.getItem(STORAGE_KEY);
+        let parsedLocalContacts: CrmContact[] = [];
+
+        if (saved) {
+          try {
+            parsedLocalContacts = JSON.parse(saved);
+          } catch {
+            parsedLocalContacts = [];
+          }
+        }
 
         setDbContacts(dbData);
-        setLocalContacts(localData);
+        setLocalContacts(parsedLocalContacts);
       } catch (err) {
         setError(
           err instanceof Error
@@ -51,6 +55,12 @@ export default function CrmContactsPage() {
     loadContacts();
   }, []);
 
+  const persistLocalContacts = (nextContacts: CrmContact[]) => {
+    setLocalContacts(nextContacts);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextContacts));
+    window.dispatchEvent(new Event("lauttcrm-contacts-updated"));
+  };
+
   const handleAddLocalContact = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newNama.trim() || !newNoWa.trim()) return;
@@ -58,15 +68,23 @@ export default function CrmContactsPage() {
     try {
       setSaving(true);
       setError(null);
-      await addLocalContact({ nama: newNama.trim(), no_wa: newNoWa.trim() });
-      
-      const localData = await getLocalContacts();
-      setLocalContacts(localData);
-      
+
+      const newContact: CrmContact = {
+        id: Date.now(),
+        nama: newNama.trim(),
+        no_wa: newNoWa.trim(),
+        created_at: new Date().toISOString(),
+      };
+
+      const nextContacts = [newContact, ...localContacts];
+      persistLocalContacts(nextContacts);
+
       setNewNama("");
       setNewNoWa("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal menambah kontak manual");
+      setError(
+        err instanceof Error ? err.message : "Gagal menambah kontak manual",
+      );
     } finally {
       setSaving(false);
     }
@@ -75,11 +93,12 @@ export default function CrmContactsPage() {
   const handleDeleteLocalContact = async (id: number) => {
     if (!confirm("Hapus kontak manual ini?")) return;
     try {
-      await deleteLocalContact(id);
-      const localData = await getLocalContacts();
-      setLocalContacts(localData);
+      const nextContacts = localContacts.filter((contact) => contact.id !== id);
+      persistLocalContacts(nextContacts);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal menghapus kontak manual");
+      setError(
+        err instanceof Error ? err.message : "Gagal menghapus kontak manual",
+      );
     }
   };
 
@@ -95,7 +114,8 @@ export default function CrmContactsPage() {
               Kelola Kontak WA
             </h1>
             <p className="mt-2 text-sm text-zinc-600">
-              Daftar kontak pelanggan dari database dan tambahan manual (JSON).
+              Daftar kontak pelanggan dari database dan tambahan manual yang
+              tersimpan di browser.
             </p>
           </div>
           <div className="text-right">
@@ -121,7 +141,8 @@ export default function CrmContactsPage() {
             Tambah Kontak Manual
           </h2>
           <p className="mt-2 text-sm text-zinc-600">
-            Tambahkan nomor pelanggan secara manual ke file lokal (JSON).
+            Tambahkan nomor pelanggan secara manual dan simpan di browser untuk
+            demonstrasi prototype.
           </p>
           <form onSubmit={handleAddLocalContact} className="mt-6 space-y-4">
             <div>
@@ -206,7 +227,9 @@ export default function CrmContactsPage() {
                     className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-zinc-50 p-4 transition hover:border-emerald-200 hover:bg-emerald-50/30"
                   >
                     <div className="flex items-center gap-4">
-                      <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold ${isLocal ? 'bg-sky-100 text-sky-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                      <div
+                        className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold ${isLocal ? "bg-sky-100 text-sky-800" : "bg-emerald-100 text-emerald-800"}`}
+                      >
                         {contact.nama.charAt(0).toUpperCase()}
                       </div>
                       <div>
@@ -217,16 +240,28 @@ export default function CrmContactsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className={`rounded-full px-3 py-1 text-xs font-medium ${isLocal ? 'bg-sky-100 text-sky-800' : 'bg-emerald-100 text-emerald-800'}`}>
-                        {isLocal ? 'Manual' : 'Database'}
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-medium ${isLocal ? "bg-sky-100 text-sky-800" : "bg-emerald-100 text-emerald-800"}`}
+                      >
+                        {isLocal ? "Manual" : "Database"}
                       </span>
                       {isLocal && (
                         <button
                           onClick={() => handleDeleteLocalContact(contact.id)}
                           className="text-rose-500 hover:text-rose-700"
                         >
-                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          <svg
+                            className="h-5 w-5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                            />
                           </svg>
                         </button>
                       )}

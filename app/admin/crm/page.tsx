@@ -5,10 +5,24 @@ import {
   sendCrmMessage,
   sendCrmReminder,
   getCustomerContacts,
-  getLocalContacts,
 } from "@/lib/adminApi";
 import { getAdminUser } from "@/lib/auth";
 import type { CrmContact } from "@/lib/types";
+
+const STORAGE_KEY = "lauttcrm-local-contacts";
+
+function readLocalContacts(): CrmContact[] {
+  if (typeof window === "undefined") return [];
+
+  const saved = window.localStorage.getItem(STORAGE_KEY);
+  if (!saved) return [];
+
+  try {
+    return JSON.parse(saved) as CrmContact[];
+  } catch {
+    return [];
+  }
+}
 
 export default function AdminCrmPage() {
   const [waNumber, setWaNumber] = useState("");
@@ -34,19 +48,32 @@ export default function AdminCrmPage() {
           setError("Sesi admin tidak ditemukan. Silakan login kembali.");
           return;
         }
-        
-        const [dbData, localData] = await Promise.all([
-          getCustomerContacts(),
-          getLocalContacts()
-        ]);
-        
+
+        const dbData = await getCustomerContacts();
+        const localData = readLocalContacts();
+
         setContacts([...dbData, ...localData]);
       } catch (err) {
         console.error("Gagal memuat kontak:", err);
         setError("Gagal memuat kontak.");
       }
     };
-    loadContacts();
+
+    const handleContactsUpdated = () => {
+      void loadContacts();
+    };
+
+    void loadContacts();
+    window.addEventListener("storage", handleContactsUpdated);
+    window.addEventListener("lauttcrm-contacts-updated", handleContactsUpdated);
+
+    return () => {
+      window.removeEventListener("storage", handleContactsUpdated);
+      window.removeEventListener(
+        "lauttcrm-contacts-updated",
+        handleContactsUpdated,
+      );
+    };
   }, []);
 
   const handleBulkSend = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -226,7 +253,8 @@ export default function AdminCrmPage() {
             Kirim WA ke Banyak Kontak
           </h2>
           <p className="mt-2 text-sm text-zinc-600">
-            Kirim pesan WA ke beberapa kontak sekaligus dari daftar kontak pelanggan.
+            Kirim pesan WA ke beberapa kontak sekaligus dari daftar kontak
+            pelanggan.
           </p>
 
           {/* Info Banner */}
@@ -248,8 +276,8 @@ export default function AdminCrmPage() {
               <div className="ml-3">
                 <div className="text-sm text-emerald-800">
                   <p>
-                    Kontak diambil dari <strong>database user</strong> dan <strong>kontak manual</strong>.
-                    Kelola kontak di{" "}
+                    Kontak diambil dari <strong>database user</strong> dan{" "}
+                    <strong>kontak manual</strong>. Kelola kontak di{" "}
                     <a
                       href="/admin/crm/contacts"
                       className="underline hover:no-underline font-medium"
