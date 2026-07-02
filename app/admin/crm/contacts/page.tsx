@@ -102,6 +102,69 @@ export default function CrmContactsPage() {
     }
   };
 
+  const handleExportJson = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      contacts: localContacts,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "lauttcrm-contacts.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportJson = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const importedContacts = Array.isArray(parsed?.contacts)
+        ? parsed.contacts
+        : Array.isArray(parsed)
+          ? parsed
+          : [];
+
+      if (!importedContacts.length) {
+        throw new Error("File JSON tidak berisi kontak yang valid.");
+      }
+
+      const normalizedContacts = importedContacts.map(
+        (item: Record<string, unknown>, index: number) => ({
+          id: (item.id as number | undefined) ?? Date.now() + index,
+          nama:
+            (item.nama as string | undefined) ??
+            (item.name as string | undefined) ??
+            "Tanpa Nama",
+          no_wa:
+            (item.no_wa as string | undefined) ??
+            (item.noWa as string | undefined) ??
+            (item.phone as string | undefined) ??
+            "",
+          created_at:
+            (item.created_at as string | undefined) ?? new Date().toISOString(),
+        }),
+      );
+
+      persistLocalContacts(normalizedContacts);
+      setError(null);
+      event.target.value = "";
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Gagal mengimpor file JSON",
+      );
+    }
+  };
+
   const allContacts = [...dbContacts, ...localContacts];
 
   return (
@@ -169,13 +232,33 @@ export default function CrmContactsPage() {
                 required
               />
             </div>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-full bg-emerald-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-60"
-            >
-              {saving ? "Menyimpan..." : "Simpan Kontak"}
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-full bg-emerald-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-60"
+              >
+                {saving ? "Menyimpan..." : "Simpan Kontak"}
+              </button>
+              <button
+                type="button"
+                onClick={handleExportJson}
+                className="rounded-full border border-zinc-200 bg-white px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-50"
+              >
+                Unduh JSON
+              </button>
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-emerald-700">
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2">
+                Impor JSON
+              </span>
+              <input
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={handleImportJson}
+              />
+            </label>
           </form>
         </section>
 
