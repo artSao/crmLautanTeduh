@@ -74,12 +74,14 @@ export default function AdminPage() {
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Link
-              href="/admin/queue"
+            <a
+              href="https://sistem-antrean.vercel.app/"
+              target="_blank"
+              rel="noreferrer"
               className="rounded-3xl bg-zinc-950 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-zinc-800"
             >
               Lihat Antrian Cabang
-            </Link>
+            </a>
             <Link
               href="/admin/broadcast"
               className="rounded-3xl border border-zinc-200 bg-white px-5 py-3 text-center text-sm font-semibold text-zinc-950 transition hover:bg-zinc-50"
