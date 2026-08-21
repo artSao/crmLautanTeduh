@@ -152,6 +152,10 @@ export default function AdminCrmPage() {
     }
   };
 
+  // Fitur kirim pengingat antrian:
+  // admin memasukkan ID antrian dan optional custom pesan,
+  // lalu frontend mengirim payload ke endpoint /api/crm/reminders.
+  // Endpoint ini nanti akan memproses pengiriman ke WhatsApp dengan data antrian yang sesuai.
   const handleSendReminder = async (
     event: React.FormEvent<HTMLFormElement>,
   ) => {
@@ -366,47 +370,7 @@ export default function AdminCrmPage() {
           )}
         </section>
 
-        <section className="rounded-[32px] border border-zinc-200 bg-white p-8 shadow-sm">
-          <h2 className="text-xl font-semibold text-zinc-950">
-            Kirim Pengingat Antrian
-          </h2>
-          <p className="mt-2 text-sm text-zinc-600">
-            Gunakan antrian ID untuk mengirim pesan pengingat WA melalui
-            backend.
-          </p>
-          <form onSubmit={handleSendReminder} className="mt-6 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-zinc-700">
-                ID Antrian
-              </label>
-              <input
-                value={antrianId}
-                onChange={(event) => setAntrianId(event.target.value)}
-                className="mt-2 w-full rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                placeholder="5"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700">
-                Pesan (opsional)
-              </label>
-              <textarea
-                value={reminderMessage}
-                onChange={(event) => setReminderMessage(event.target.value)}
-                className="mt-2 h-32 w-full rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
-                placeholder="Isi jika ingin menggunakan pesan khusus."
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-full bg-sky-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-sky-800 disabled:opacity-60"
-            >
-              {loading ? "Mengirim..." : "Kirim Pengingat WA"}
-            </button>
-          </form>
-        </section>
+      
       </div>
     </div>
   );

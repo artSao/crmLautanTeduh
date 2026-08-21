@@ -169,17 +169,20 @@ export async function getBroadcastList(): Promise<Broadcast[]> {
 /**
  * Ambil kontak WhatsApp user yang sedang login
  */
-export async function getUserKontak(): Promise<{ user_id: number; no_wa: string } | null> {
+export async function getUserKontak(): Promise<{
+  user_id: number;
+  no_wa: string;
+} | null> {
   try {
-    const payload = await fetchJson<{ success: boolean; data: { user_id: number; no_wa: string } }>(
-      `${API_BASE_URL}/users/kontak`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
+    const payload = await fetchJson<{
+      success: boolean;
+      data: { user_id: number; no_wa: string };
+    }>(`${API_BASE_URL}/users/kontak`, {
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
       },
-    );
+    });
     return payload.data;
   } catch (err: any) {
     // If empty or not found
@@ -203,7 +206,7 @@ export async function getCustomerContacts(): Promise<CrmContact[]> {
   );
 
   const contacts = payload.data || [];
-  
+
   return contacts
     .filter((u: any) => u.no_wa && u.no_wa.trim() !== "")
     .map((u: any) => ({
@@ -257,11 +260,14 @@ export async function getLocalContacts(): Promise<CrmContact[]> {
   return data.contacts || [];
 }
 
-export async function addLocalContact(payload: { nama: string; no_wa: string }): Promise<void> {
+export async function addLocalContact(payload: {
+  nama: string;
+  no_wa: string;
+}): Promise<void> {
   const res = await fetch("/api/crm/contacts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
   if (!res.ok) {
     const data = await res.json();
@@ -271,7 +277,7 @@ export async function addLocalContact(payload: { nama: string; no_wa: string }):
 
 export async function deleteLocalContact(id: number): Promise<void> {
   const res = await fetch(`/api/crm/contacts?id=${id}`, {
-    method: "DELETE"
+    method: "DELETE",
   });
   if (!res.ok) {
     throw new Error("Gagal menghapus kontak manual");
